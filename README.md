@@ -26,5 +26,22 @@ This Streamlit app allows users to search for arXiv papers and view RSS feeds fr
 
 ## Usage
 
-Run the Streamlit app:
+1. Run the Streamlit app:
+   ```
+   streamlit run app.py
+   ```
+
+2. Open your web browser and go to the URL provided by the Streanlit in the terminal (usually http://localhost:8501)
+   
+3. Use the app:
+   - Enter a search query in the text input (default is retrieval augmented generation)
+   - Adjust the number of results using the slider
+   - Click the "Search" button to fetch and display the results
+   - For RSS feeds, click Refresh Data on top left of the page first, then choose corresponding options in dropdown (default topic 
+     is cs.ai), latest RSS feeds appear for the chosen category
+     
+## Acknowledgments
+
+arXiv.org for providing the API and RSS feeds.
+Streamlit for the amazing app framework.
 

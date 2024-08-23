@@ -16,7 +16,7 @@ This Streamlit app allows users to search for arXiv papers and view RSS feeds fr
 1. Clone this repository:
    ```
    git clone https://github.com/manivini/arxiv_search_rssfeeds.git
-   cd arxiv-paper-search-and-rss
+   cd arxiv_search_rssfeeds
    ```
 
 2. Install the required packages:

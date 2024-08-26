@@ -10,17 +10,25 @@ from dateutil import parser
 
 st.set_page_config(layout="wide")
 
-st.markdown(
-    """
-    <style>
-    body {
-        background-color: #111111;
-        color: white;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+if 'page' not in st.session_state:
+    st.session_state.page = 1
+
+if 'cached_feed' not in st.session_state:
+    st.session_state.cached_feed = None
+    st.session_state.last_successful_fetch = None
+
+def is_weekend():
+    eastern = pytz.timezone('US/Eastern')
+    now = datetime.now(eastern)
+    return now.weekday() >= 5 
+
+def get_next_update_time():
+    eastern = pytz.timezone('US/Eastern')
+    now = datetime.now(eastern)
+    next_update = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    while next_update.weekday() >= 5:  # Skip to Monday if it's weekend
+        next_update += timedelta(days=1)
+    return next_update
 
 def fetch_arxiv_data(query='cat:cs.AI', max_results=10):
     base_url = 'http://export.arxiv.org/api/query?'
@@ -52,19 +60,56 @@ def parse_arxiv_data(xml_data):
     
     return papers
 
+# Initialize session state for cached data if it doesn't exist
+if 'cached_feed' not in st.session_state:
+    st.session_state.cached_feed = None
+    st.session_state.last_successful_fetch = None
+
+from datetime import datetime, timedelta
+import pytz
+
+
 @st.cache_data(ttl=3600)
 def fetch_rss_feed(url):
-    feed = feedparser.parse(url)
-    return feed
+    if is_weekend():
+        if 'last_feed' in st.session_state:
+            return st.session_state.last_feed, "Displaying cached data. Feed updates are paused during weekends."
+        else:
+            return None, "Feed updates are paused during weekends. Please check back on weekdays."
 
-def parse_date(date_str):
+    current_time = datetime.now(pytz.utc)
+    
     try:
-        return parser.parse(date_str)
-    except (ValueError, TypeError):
-        return None
+        # First, check if the URL is reachable
+        response = requests.get(url)
+        response.raise_for_status()  # Raises an HTTPError for bad responses
+        
+        # If reachable, parse the feed
+        feed = feedparser.parse(response.text)
+        
+        if not feed.entries:
+            return None, "The feed is currently empty. This might be due to no recent updates."
+        
+        st.session_state.last_feed = feed  # Cache the feed
+        return feed, None
+    except requests.RequestException as e:
+        return None, f"Error fetching feed: {str(e)}"
+    
+    
+def display_rss_feed(feed, fetch_time, is_cached, error_message, page=1, per_page=10, date_filter=None, keyword_filter=None):
+    if error_message:
+        st.warning(error_message)
+    
+    if feed is None:
+        st.error("No data available to display.")
+        return
 
-def display_rss_feed(feed, page=1, per_page=10, date_filter=None, keyword_filter=None):
     st.write(f"## RSS Feed: {feed.feed.title}")
+    
+    if is_cached:
+        st.warning(f"Displaying cached data from {fetch_time.strftime('%Y-%m-%d %H:%M:%S UTC')}.")
+    else:
+        st.success(f"Data refreshed at {fetch_time.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     
     # Parse the feed's pubDate
     feed_pub_date = parse_date(feed.feed.get('published')) or parse_date(feed.feed.get('updated'))
@@ -115,16 +160,12 @@ def display_rss_feed(feed, page=1, per_page=10, date_filter=None, keyword_filter
     
     total_pages = -(-len(feed_data) // per_page)  # Ceiling division
     st.write(f"Page {page} of {total_pages}")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        if page > 1:
-            if st.button("Previous Page"):
-                st.session_state.page -= 1
-    with col2:
-        if page < total_pages:
-            if st.button("Next Page"):
-                st.session_state.page += 1
+
+def parse_date(date_str):
+    try:
+        return parser.parse(date_str)
+    except (ValueError, TypeError):
+        return None
 
 def main():
     st.title('arXiv Paper Search and RSS Feeds')
@@ -167,20 +208,36 @@ def main():
     selected_feed = st.selectbox('Select RSS feed:', list(feed_options.keys()), index=0)
     feed_url = feed_options[selected_feed]
 
-    # Date filter
-    date_filter = st.date_input("Show entries from (leave empty for all):", value=None)
-    if date_filter:
-        date_filter = datetime.combine(date_filter, datetime.min.time()).replace(tzinfo=pytz.UTC)
+   
+    # Add a unique key to the Refresh Data button
+    if st.button('Refresh Data', key='refresh_data_button'):
+        st.session_state.pop('last_feed', None)  # Clear cached feed on refresh
 
-    # Keyword filter
-    keyword_filter = st.text_input("Filter by keyword (leave empty for all):")
+    feed, error_message = fetch_rss_feed(feed_url)
 
-    if 'page' not in st.session_state:
-        st.session_state.page = 1
+    if error_message:
+        st.warning(error_message)
+        if is_weekend():
+            next_update = get_next_update_time()
+            st.info(f"Next feed update expected on: {next_update.strftime('%A, %B %d at %I:%M %p')} EST")
+    elif feed:
+        display_rss_feed(feed, datetime.now(pytz.utc), False, None, page=st.session_state.page)
+        st.success(f"Feed last updated on: {feed.feed.get('pubDate', 'Unknown')}")
+    else:
+        st.error("Failed to fetch the feed.")
 
-    with st.spinner(f'Fetching RSS feed for {selected_feed}...'):
-        feed = fetch_rss_feed(feed_url)
-        display_rss_feed(feed, page=st.session_state.page, date_filter=date_filter, keyword_filter=keyword_filter)
+    # Add unique keys to the pagination buttons
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.session_state.page > 1:
+            if st.button("Previous Page", key='prev_page_button'):
+                st.session_state.page -= 1
+                st.rerun()
+    with col2:
+        if feed and len(feed.entries) > st.session_state.page * 10:  # Assuming 10 items per page
+            if st.button("Next Page", key='next_page_button'):
+                st.session_state.page += 1
+                st.rerun()
 
 if __name__ == "__main__":
     main()

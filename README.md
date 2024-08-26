@@ -47,7 +47,7 @@ Streamlit for the amazing app framework.
 
 ## Live Demo
 This application is deployed on Streamlit Community Cloud. Try it out here:
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://https://arxivsearchrssfeeds.streamlit.app/)
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://https://arxivsearchrssfeeds.streamlit.app)
 
 ## Screenshot![Screenshot 2024-08-26 at 4 30 07 PM](https://github.com/user-attachments/assets/7040d21d-3df7-4655-9a28-2693e675fac7)
 
